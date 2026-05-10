@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import io
 import inspect
+import json
 import time
-from contextlib import redirect_stderr, redirect_stdout
+import threading
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
+import sys
 
 from src.configs import load_experiment_config
 from src.evaluate import build_metrics_record, build_sample_preview
@@ -69,6 +73,39 @@ def _filter_supported_kwargs(callable_obj: Any, kwargs: Mapping[str, Any]) -> di
     return supported
 
 
+class _TeeStream:
+    def __init__(self, primary: Any, secondary: Any) -> None:
+        self._primary = primary
+        self._secondary = secondary
+
+    def write(self, text: str) -> int:
+        primary_written = self._primary.write(text)
+        self._secondary.write(text)
+        return primary_written
+
+    def flush(self) -> None:
+        self._primary.flush()
+        self._secondary.flush()
+
+
+@dataclass
+class _RunHeartbeat:
+    run_dir: Path
+
+    def update(self, *, status: str, step: int | None = None, message: str | None = None) -> None:
+        payload = {
+            "status": status,
+            "step": step,
+            "message": message,
+            "timestamp": time.time(),
+        }
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "heartbeat.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+
 def _select_precision(torch: Any) -> dict[str, bool]:
     if not getattr(torch, "cuda", None) or not torch.cuda.is_available():
         return {"bf16": False, "fp16": False}
@@ -82,13 +119,13 @@ def _import_training_stack():
     try:
         import torch  # type: ignore
         from datasets import Dataset  # type: ignore
-        from transformers import AutoTokenizer  # type: ignore
+        from transformers import AutoTokenizer, TrainerCallback  # type: ignore
         from trl import DPOConfig, DPOTrainer  # type: ignore
     except Exception as exc:  # pragma: no cover - import guard
         raise RuntimeError(
             "Phase 5 training requires torch, transformers, datasets, accelerate, and trl."
         ) from exc
-    return torch, Dataset, AutoTokenizer, DPOConfig, DPOTrainer
+    return torch, Dataset, AutoTokenizer, TrainerCallback, DPOConfig, DPOTrainer
 
 
 def _load_preference_dataset(dataset_path: Path):
@@ -184,7 +221,7 @@ def run_experiment(
     if resume and (run_dir / "metrics.json").exists():
         return {"experiment_id": experiment_id, "status": "skipped", **spec}
 
-    torch, Dataset, AutoTokenizer, DPOConfig, DPOTrainer = _import_training_stack()
+    torch, Dataset, AutoTokenizer, TrainerCallback, DPOConfig, DPOTrainer = _import_training_stack()
     precision = _select_precision(torch)
     train_path = resolve_train_dataset_path(spec, data_root)
     eval_path = resolve_eval_dataset_path(data_root)
@@ -194,6 +231,7 @@ def run_experiment(
     model_name = config["model"]["primary"]
     fallback_name = config["model"].get("fallback")
     logs = io.StringIO()
+    heartbeat = _RunHeartbeat(run_dir)
     start = time.perf_counter()
     trainer = None
     status = "success"
@@ -205,8 +243,29 @@ def run_experiment(
     dpo_kwargs.update(precision)
     dpo_args = DPOConfig(**dpo_kwargs)
 
+    class _HeartbeatCallback(TrainerCallback):
+        def on_train_begin(self, args, state, control, **kwargs):  # type: ignore[override]
+            heartbeat.update(status="training", step=0, message="training started")
+            print("[heartbeat] training started", flush=True)
+            return control
+
+        def on_step_end(self, args, state, control, **kwargs):  # type: ignore[override]
+            heartbeat.update(status="training", step=int(getattr(state, "global_step", 0)), message="step update")
+            if getattr(state, "global_step", 0) % 10 == 0:
+                print(f"[heartbeat] step={int(state.global_step)}", flush=True)
+            return control
+
+        def on_train_end(self, args, state, control, **kwargs):  # type: ignore[override]
+            heartbeat.update(status="finished", step=int(getattr(state, "global_step", 0)), message="training ended")
+            print("[heartbeat] training finished", flush=True)
+            return control
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        with redirect_stdout(logs), redirect_stderr(logs):
+        with ExitStack() as stack:
+            stack.enter_context(redirect_stdout(_TeeStream(sys.stdout, logs)))
+            stack.enter_context(redirect_stderr(_TeeStream(sys.stderr, logs)))
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             tokenizer.padding_side = "left"
             if tokenizer.pad_token is None:
@@ -217,6 +276,7 @@ def run_experiment(
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 processing_class=tokenizer,
+                callbacks=[_HeartbeatCallback()],
                 **_filter_supported_kwargs(DPOTrainer, _build_prompt_kwargs(config)),
             )
             trainer.train()
@@ -226,7 +286,9 @@ def run_experiment(
         if fallback_name and fallback_name != model_name:
             logs.write(f"\nPrimary model failed; retrying with fallback {fallback_name}\n")
             try:
-                with redirect_stdout(logs), redirect_stderr(logs):
+                with ExitStack() as stack:
+                    stack.enter_context(redirect_stdout(_TeeStream(sys.stdout, logs)))
+                    stack.enter_context(redirect_stderr(_TeeStream(sys.stderr, logs)))
                     tokenizer = AutoTokenizer.from_pretrained(fallback_name)
                     tokenizer.padding_side = "left"
                     if tokenizer.pad_token is None:
@@ -237,6 +299,7 @@ def run_experiment(
                         train_dataset=train_dataset,
                         eval_dataset=eval_dataset,
                         processing_class=tokenizer,
+                        callbacks=[_HeartbeatCallback()],
                         **_filter_supported_kwargs(DPOTrainer, _build_prompt_kwargs(config)),
                     )
                     trainer.train()

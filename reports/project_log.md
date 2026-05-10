@@ -295,3 +295,7 @@ python -m src.smoke
 ### Next Step
 
 - 在 Colab 或可用的 Anaconda 训练环境里运行 `python main.py batch --plan configs/version_a.yaml`，再把真实结果回填到 `results/` 和 `reports/version_a_report.md`。
+### Progress Signal Update
+
+- 新增 live output 和 `results/runs/{experiment_id}/heartbeat.json`，用于判断训练是否仍在继续。
+- 训练日志会实时刷到标准输出，不再只在结束后一次性写回。
