@@ -1,0 +1,7 @@
+inherits: base.yaml
+
+experiment:
+  version: A
+  noise_type: label_flip
+  noise_rate: 0.2
+  seed: 42

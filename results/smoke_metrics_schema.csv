@@ -1,0 +1,9 @@
+metric_name,data_type,placeholder_value,notes
+train_loss,float,NA,Placeholder only; real training is not run in Phase 4.
+eval_loss,float,NA,Placeholder only; real training is not run in Phase 4.
+reward_margin,float,NA,Placeholder only; real training is not run in Phase 4.
+chosen_logprob,float,NA,Placeholder only; real training is not run in Phase 4.
+rejected_logprob,float,NA,Placeholder only; real training is not run in Phase 4.
+win_rate,float,NA,Placeholder only; real training is not run in Phase 4.
+runtime_minutes,float,NA,Placeholder only; real training is not run in Phase 4.
+status,string,NA,Run status placeholder for later Colab experiments.

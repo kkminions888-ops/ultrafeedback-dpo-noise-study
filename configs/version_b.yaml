@@ -1,0 +1,12 @@
+name: version_b
+experiments:
+  - clean.yaml
+  - label_flip_10.yaml
+  - label_flip_20.yaml
+  - label_flip_30.yaml
+  - ambiguous_10.yaml
+  - ambiguous_20.yaml
+  - ambiguous_30.yaml
+  - weak_quality_10.yaml
+  - weak_quality_20.yaml
+  - weak_quality_30.yaml

@@ -1,0 +1,32 @@
+project_name: dpo_noise_study
+
+dataset:
+  name: trl-lib/ultrafeedback_binarized
+  train_size: 1000
+  eval_size: 200
+  seed: 42
+
+model:
+  primary: Qwen/Qwen2.5-0.5B-Instruct
+  fallback: EleutherAI/pythia-410m
+
+training:
+  max_steps: 200
+  learning_rate: 0.000005
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  max_length: 512
+  max_prompt_length: 256
+  seed: 42
+
+evaluation:
+  metrics:
+    - train_loss
+    - eval_loss
+    - reward_margin
+    - chosen_logprob
+    - rejected_logprob
+
+compute:
+  local_cpu_only: true
+  colab_gpu_training: true

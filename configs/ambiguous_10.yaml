@@ -1,0 +1,7 @@
+inherits: base.yaml
+
+experiment:
+  version: B
+  noise_type: ambiguous
+  noise_rate: 0.1
+  seed: 42
