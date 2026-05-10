@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import inspect
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -36,7 +37,6 @@ def build_dpo_config_kwargs(config: Mapping[str, Any], *, output_dir: Path) -> d
         "learning_rate": training["learning_rate"],
         "max_steps": training["max_steps"],
         "max_length": training["max_length"],
-        "max_prompt_length": training.get("max_prompt_length"),
         "seed": training["seed"],
         "report_to": "none",
         "do_train": True,
@@ -50,6 +50,23 @@ def build_dpo_config_kwargs(config: Mapping[str, Any], *, output_dir: Path) -> d
         "bf16": False,
         "fp16": False,
     }
+
+
+def _build_prompt_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
+    training = config["training"]
+    max_prompt_length = training.get("max_prompt_length")
+    if max_prompt_length is None:
+        return {}
+    return {"max_prompt_length": max_prompt_length}
+
+
+def _filter_supported_kwargs(callable_obj: Any, kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    signature = inspect.signature(callable_obj)
+    supported: dict[str, Any] = {}
+    for key, value in kwargs.items():
+        if key in signature.parameters and value is not None:
+            supported[key] = value
+    return supported
 
 
 def _select_precision(torch: Any) -> dict[str, bool]:
@@ -200,6 +217,7 @@ def run_experiment(
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 processing_class=tokenizer,
+                **_filter_supported_kwargs(DPOTrainer, _build_prompt_kwargs(config)),
             )
             trainer.train()
             train_metrics = _collect_training_metrics(trainer.state.log_history)
@@ -219,6 +237,7 @@ def run_experiment(
                         train_dataset=train_dataset,
                         eval_dataset=eval_dataset,
                         processing_class=tokenizer,
+                        **_filter_supported_kwargs(DPOTrainer, _build_prompt_kwargs(config)),
                     )
                     trainer.train()
                     train_metrics = _collect_training_metrics(trainer.state.log_history)
