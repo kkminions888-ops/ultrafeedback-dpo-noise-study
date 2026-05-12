@@ -47,6 +47,7 @@ def test_build_dpo_config_kwargs_uses_base_training_parameters():
     assert kwargs["seed"] == 42
     assert kwargs["report_to"] == "none"
     assert kwargs["do_train"] is True
+    assert kwargs["use_cpu"] is False
 
 
 def test_build_metrics_record_fills_missing_metrics_with_na():

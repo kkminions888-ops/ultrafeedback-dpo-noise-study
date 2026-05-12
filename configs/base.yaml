@@ -28,5 +28,5 @@ evaluation:
     - rejected_logprob
 
 compute:
-  local_cpu_only: true
+  local_cpu_only: false
   colab_gpu_training: true
