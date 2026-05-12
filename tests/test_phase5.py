@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.evaluate import build_metrics_record
 from src.pipeline import run_batch
+from src import train_dpo
 from src.train_dpo import build_dpo_config_kwargs, resolve_train_dataset_path
 
 
@@ -48,6 +49,29 @@ def test_build_dpo_config_kwargs_uses_base_training_parameters():
     assert kwargs["report_to"] == "none"
     assert kwargs["do_train"] is True
     assert kwargs["use_cpu"] is False
+
+
+def test_load_preference_dataset_handles_full_training_stack_tuple(tmp_path: Path, monkeypatch):
+    dataset_path = tmp_path / "train.jsonl"
+    dataset_path.write_text(
+        '{"prompt": "p", "chosen": "c", "rejected": "r"}\n',
+        encoding="utf-8",
+    )
+
+    class FakeDataset:
+        @classmethod
+        def from_list(cls, records):
+            return {"records": records}
+
+    monkeypatch.setattr(
+        train_dpo,
+        "_import_training_stack",
+        lambda: (object(), FakeDataset, object(), object(), object(), object()),
+    )
+
+    dataset = train_dpo._load_preference_dataset(dataset_path)
+
+    assert dataset == {"records": [{"prompt": "p", "chosen": "c", "rejected": "r"}]}
 
 
 def test_build_metrics_record_fills_missing_metrics_with_na():

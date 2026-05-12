@@ -129,7 +129,7 @@ def _import_training_stack():
 
 
 def _load_preference_dataset(dataset_path: Path):
-    _, Dataset, _, _, _ = _import_training_stack()
+    _, Dataset, _, _, _, _ = _import_training_stack()
     records = load_json_records(dataset_path)
     return Dataset.from_list(records)
 
