@@ -103,3 +103,25 @@ def append_experiment_row(path: Path, row: Mapping[str, Any]) -> None:
 
 def append_metrics_row(path: Path, row: Mapping[str, Any]) -> None:
     _append_row(path, METRICS_FIELDS, row, delimiter=",")
+
+
+def export_named_experiment_result(results_root: Path, row: Mapping[str, Any]) -> Path:
+    results_root.mkdir(parents=True, exist_ok=True)
+    config_name = str(row.get("config_name", "unknown"))
+    path = results_root / f"experiments_{config_name}.tsv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EXPERIMENT_FIELDS, delimiter="\t")
+        writer.writeheader()
+        writer.writerow({name: row.get(name, "NA") for name in EXPERIMENT_FIELDS})
+    return path
+
+
+def export_named_metrics_result(results_root: Path, row: Mapping[str, Any]) -> Path:
+    results_root.mkdir(parents=True, exist_ok=True)
+    config_name = str(row.get("config_name", "unknown"))
+    path = results_root / f"metrics_{config_name}.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=METRICS_FIELDS, delimiter=",")
+        writer.writeheader()
+        writer.writerow({name: row.get(name, "NA") for name in METRICS_FIELDS})
+    return path

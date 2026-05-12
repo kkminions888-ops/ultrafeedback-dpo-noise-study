@@ -13,7 +13,14 @@ import sys
 
 from src.configs import load_experiment_config
 from src.evaluate import build_metrics_record, build_sample_preview
-from src.experiment_store import append_experiment_row, append_metrics_row, build_experiment_id, write_run_artifacts
+from src.experiment_store import (
+    append_experiment_row,
+    append_metrics_row,
+    build_experiment_id,
+    export_named_experiment_result,
+    export_named_metrics_result,
+    write_run_artifacts,
+)
 from src.load_data import load_json_records
 
 
@@ -355,4 +362,6 @@ def run_experiment(
     )
     append_experiment_row(results_root / "experiments.tsv", summary)
     append_metrics_row(results_root / "metrics.csv", metrics)
+    export_named_experiment_result(results_root, summary)
+    export_named_metrics_result(results_root, metrics)
     return summary

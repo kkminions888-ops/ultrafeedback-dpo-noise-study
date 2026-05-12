@@ -7,6 +7,8 @@ from src.experiment_store import (
     append_experiment_row,
     append_metrics_row,
     build_experiment_id,
+    export_named_experiment_result,
+    export_named_metrics_result,
     write_run_artifacts,
 )
 
@@ -97,3 +99,52 @@ def test_append_metrics_row_creates_header_and_appends_rows(tmp_path: Path):
 
     assert rows[0]["experiment_id"] == "exp-1"
     assert rows[0]["status"] == "planned"
+
+
+def test_export_named_metrics_result_uses_config_name_in_filename(tmp_path: Path):
+    path = export_named_metrics_result(
+        tmp_path / "results",
+        {
+            "experiment_id": "exp-1",
+            "config_name": "label_flip_20",
+            "noise_type": "label_flip",
+            "noise_rate": 0.2,
+            "seed": 42,
+            "train_loss": 0.5,
+            "eval_loss": 0.7,
+            "reward_margin": "NA",
+            "chosen_logprob": -1.0,
+            "rejected_logprob": -2.0,
+            "win_rate": "NA",
+            "runtime_minutes": 1.0,
+            "status": "success",
+        },
+    )
+
+    assert path.name == "metrics_label_flip_20.csv"
+    assert path.exists()
+
+
+def test_export_named_experiment_result_uses_config_name_in_filename(tmp_path: Path):
+    path = export_named_experiment_result(
+        tmp_path / "results",
+        {
+            "experiment_id": "exp-1",
+            "config_name": "label_flip_20",
+            "version": "A",
+            "noise_type": "label_flip",
+            "noise_rate": 0.2,
+            "seed": 42,
+            "model_name": "Qwen/Qwen2.5-0.5B-Instruct",
+            "dataset_name": "trl-lib/ultrafeedback_binarized",
+            "train_size": 1000,
+            "eval_size": 200,
+            "max_steps": 200,
+            "status": "success",
+            "primary_metric": "NA",
+            "notes": "ok",
+        },
+    )
+
+    assert path.name == "experiments_label_flip_20.tsv"
+    assert path.exists()
