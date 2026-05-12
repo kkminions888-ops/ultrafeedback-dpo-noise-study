@@ -74,6 +74,27 @@ def test_load_preference_dataset_handles_full_training_stack_tuple(tmp_path: Pat
     assert dataset == {"records": [{"prompt": "p", "chosen": "c", "rejected": "r"}]}
 
 
+def test_tee_stream_exposes_isatty_from_primary_stream():
+    class Primary:
+        def __init__(self):
+            self.value = ""
+
+        def write(self, text):
+            self.value += text
+            return len(text)
+
+        def flush(self):
+            pass
+
+        def isatty(self):
+            return True
+
+    secondary = Primary()
+    stream = train_dpo._TeeStream(Primary(), secondary)
+
+    assert stream.isatty() is True
+
+
 def test_build_metrics_record_fills_missing_metrics_with_na():
     record = build_metrics_record(
         experiment_id="exp-1",

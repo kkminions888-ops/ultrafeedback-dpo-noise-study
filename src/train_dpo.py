@@ -87,6 +87,10 @@ class _TeeStream:
         self._primary.flush()
         self._secondary.flush()
 
+    def isatty(self) -> bool:
+        isatty = getattr(self._primary, "isatty", None)
+        return bool(isatty()) if callable(isatty) else False
+
 
 @dataclass
 class _RunHeartbeat:
