@@ -20,3 +20,8 @@ def test_version_b_plan_expands_to_ten_experiments():
     assert len(plan) == 10
     assert plan[0].name == "clean.yaml"
     assert plan[-1].name == "weak_quality_30.yaml"
+
+
+def test_single_experiment_version_a_plan_expands_to_one_experiment():
+    plan = list_experiment_configs(Path("configs/version_a_clean.yaml"))
+    assert [item.name for item in plan] == ["clean.yaml"]
