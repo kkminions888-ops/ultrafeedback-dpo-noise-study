@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.configs import list_experiment_configs
+from src.configs import list_experiment_configs, load_experiment_config
 
 
 def test_version_a_plan_expands_to_four_experiments():
@@ -30,3 +30,10 @@ def test_single_experiment_version_a_plan_expands_to_one_experiment():
 def test_smoke_label_flip_plan_expands_to_one_experiment():
     plan = list_experiment_configs(Path("configs/version_a_label_flip_20_smoke.yaml"))
     assert [item.name for item in plan] == ["label_flip_20_smoke.yaml"]
+
+
+def test_nested_inherits_resolve_base_model_fields():
+    config = load_experiment_config(Path("configs/label_flip_20_smoke.yaml"))
+
+    assert config["model"]["primary"] == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert config["training"]["max_steps"] == 10

@@ -28,7 +28,7 @@ def resolve_config(config_path: Path) -> dict[str, Any]:
     if not inherits:
         return config
     base_path = config_path.parent / inherits
-    base_config = load_yaml_config(base_path)
+    base_config = resolve_config(base_path)
     return _merge_dicts(base_config, config)
 
 
