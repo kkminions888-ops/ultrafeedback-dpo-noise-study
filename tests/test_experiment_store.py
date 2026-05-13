@@ -5,9 +5,11 @@ from pathlib import Path
 
 from src.experiment_store import (
     append_experiment_row,
+    append_history_rows,
     append_metrics_row,
     build_experiment_id,
     export_named_experiment_result,
+    export_named_history_result,
     export_named_metrics_result,
     write_run_artifacts,
 )
@@ -31,12 +33,28 @@ def test_write_run_artifacts_creates_expected_files(tmp_path: Path):
     write_run_artifacts(
         run_dir,
         config={"experiment": {"version": "A"}},
+        history_rows=[
+            {
+                "experiment_id": "exp-1",
+                "config_name": "label_flip_20",
+                "step": 10,
+                "epoch": 0.1,
+                "phase": "train",
+                "loss": 0.7,
+                "reward_margin": 0.02,
+                "win_rate": 0.5,
+                "chosen_logprob": -1.0,
+                "rejected_logprob": -2.0,
+                "learning_rate": 0.000005,
+            }
+        ],
         metrics={"status": "success", "train_loss": 1.0},
         samples=[{"prompt": "p", "chosen": "c", "rejected": "r"}],
         train_log="hello",
     )
 
     assert (run_dir / "config.yaml").exists()
+    assert (run_dir / "history.csv").exists()
     assert (run_dir / "train.log").exists()
     assert (run_dir / "metrics.json").exists()
     assert (run_dir / "samples.jsonl").exists()
@@ -101,6 +119,36 @@ def test_append_metrics_row_creates_header_and_appends_rows(tmp_path: Path):
     assert rows[0]["status"] == "planned"
 
 
+def test_append_history_rows_creates_header_and_appends_rows(tmp_path: Path):
+    path = tmp_path / "results" / "history.csv"
+
+    append_history_rows(
+        path,
+        [
+            {
+                "experiment_id": "exp-1",
+                "config_name": "label_flip_20",
+                "step": 10,
+                "epoch": 0.1,
+                "phase": "train",
+                "loss": 0.7,
+                "reward_margin": 0.02,
+                "win_rate": 0.5,
+                "chosen_logprob": -1.0,
+                "rejected_logprob": -2.0,
+                "learning_rate": 0.000005,
+            }
+        ],
+    )
+
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows[0]["experiment_id"] == "exp-1"
+    assert rows[0]["config_name"] == "label_flip_20"
+    assert rows[0]["phase"] == "train"
+
+
 def test_export_named_metrics_result_uses_config_name_in_filename(tmp_path: Path):
     path = export_named_metrics_result(
         tmp_path / "results",
@@ -122,6 +170,31 @@ def test_export_named_metrics_result_uses_config_name_in_filename(tmp_path: Path
     )
 
     assert path.name == "metrics_label_flip_20.csv"
+    assert path.exists()
+
+
+def test_export_named_history_result_uses_config_name_in_filename(tmp_path: Path):
+    path = export_named_history_result(
+        tmp_path / "results",
+        "label_flip_20",
+        [
+            {
+                "experiment_id": "exp-1",
+                "config_name": "label_flip_20",
+                "step": 10,
+                "epoch": 0.1,
+                "phase": "train",
+                "loss": 0.7,
+                "reward_margin": 0.02,
+                "win_rate": 0.5,
+                "chosen_logprob": -1.0,
+                "rejected_logprob": -2.0,
+                "learning_rate": 0.000005,
+            }
+        ],
+    )
+
+    assert path.name == "history_label_flip_20.csv"
     assert path.exists()
 
 

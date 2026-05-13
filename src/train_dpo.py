@@ -15,9 +15,11 @@ from src.configs import load_experiment_config
 from src.evaluate import build_metrics_record, build_sample_preview
 from src.experiment_store import (
     append_experiment_row,
+    append_history_rows,
     append_metrics_row,
     build_experiment_id,
     export_named_experiment_result,
+    export_named_history_result,
     export_named_metrics_result,
     write_run_artifacts,
 )
@@ -217,6 +219,70 @@ def _collect_training_metrics(log_history: list[Mapping[str, Any]]) -> dict[str,
     }
 
 
+def _build_history_rows(
+    *,
+    experiment_id: str,
+    config_name: str,
+    log_history: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for entry in log_history:
+        step = entry.get("step")
+        if step is None:
+            continue
+        is_eval = any(str(key).startswith("eval_") for key in entry.keys())
+        row = {
+            "experiment_id": experiment_id,
+            "config_name": config_name,
+            "step": step,
+            "epoch": entry.get("epoch", "NA"),
+            "phase": "eval" if is_eval else "train",
+            "loss": next(
+                (
+                    entry.get(key)
+                    for key in ("eval_loss", "loss", "train_loss")
+                    if entry.get(key) is not None
+                ),
+                "NA",
+            ),
+            "reward_margin": next(
+                (
+                    entry.get(key)
+                    for key in ("eval_rewards/margins", "rewards/margins", "eval_reward_margin", "reward_margin")
+                    if entry.get(key) is not None
+                ),
+                "NA",
+            ),
+            "win_rate": next(
+                (
+                    entry.get(key)
+                    for key in ("eval_rewards/accuracies", "rewards/accuracies", "win_rate", "accuracy")
+                    if entry.get(key) is not None
+                ),
+                "NA",
+            ),
+            "chosen_logprob": next(
+                (
+                    entry.get(key)
+                    for key in ("eval_logps/chosen", "logps/chosen", "chosen_logprob", "eval_rewards/chosen", "rewards/chosen")
+                    if entry.get(key) is not None
+                ),
+                "NA",
+            ),
+            "rejected_logprob": next(
+                (
+                    entry.get(key)
+                    for key in ("eval_logps/rejected", "logps/rejected", "rejected_logprob", "eval_rewards/rejected", "rewards/rejected")
+                    if entry.get(key) is not None
+                ),
+                "NA",
+            ),
+            "learning_rate": entry.get("learning_rate", "NA"),
+        }
+        rows.append(row)
+    return rows
+
+
 def run_experiment(
     spec: Mapping[str, Any],
     *,
@@ -249,6 +315,7 @@ def run_experiment(
     note = "trained with primary model"
     train_metrics: dict[str, Any] = {"train_loss": "NA"}
     eval_metrics: dict[str, Any] = {}
+    history_rows: list[dict[str, Any]] = []
     samples = build_sample_preview(load_json_records(train_path), limit=5)
     dpo_kwargs = build_dpo_config_kwargs(config, output_dir=run_dir)
     dpo_kwargs.update(precision)
@@ -292,7 +359,17 @@ def run_experiment(
             )
             trainer.train()
             train_metrics = _collect_training_metrics(trainer.state.log_history)
+            history_rows = _build_history_rows(
+                experiment_id=experiment_id,
+                config_name=str(spec["config_name"]),
+                log_history=trainer.state.log_history,
+            )
             eval_metrics = trainer.evaluate()
+            history_rows = _build_history_rows(
+                experiment_id=experiment_id,
+                config_name=str(spec["config_name"]),
+                log_history=trainer.state.log_history,
+            )
     except Exception as exc:
         if fallback_name and fallback_name != model_name:
             logs.write(f"\nPrimary model failed; retrying with fallback {fallback_name}\n")
@@ -315,7 +392,17 @@ def run_experiment(
                     )
                     trainer.train()
                     train_metrics = _collect_training_metrics(trainer.state.log_history)
+                    history_rows = _build_history_rows(
+                        experiment_id=experiment_id,
+                        config_name=str(spec["config_name"]),
+                        log_history=trainer.state.log_history,
+                    )
                     eval_metrics = trainer.evaluate()
+                    history_rows = _build_history_rows(
+                        experiment_id=experiment_id,
+                        config_name=str(spec["config_name"]),
+                        log_history=trainer.state.log_history,
+                    )
                     model_name = fallback_name
                     note = f"trained with fallback model after primary failure: {exc}"
             except Exception as fallback_exc:
@@ -356,12 +443,15 @@ def run_experiment(
     write_run_artifacts(
         run_dir,
         config=config,
+        history_rows=history_rows,
         metrics=metrics,
         samples=samples,
         train_log=logs.getvalue(),
     )
     append_experiment_row(results_root / "experiments.tsv", summary)
     append_metrics_row(results_root / "metrics.csv", metrics)
+    append_history_rows(results_root / "history.csv", history_rows)
     export_named_experiment_result(results_root, summary)
     export_named_metrics_result(results_root, metrics)
+    export_named_history_result(results_root, str(spec["config_name"]), history_rows)
     return summary

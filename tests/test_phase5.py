@@ -185,3 +185,40 @@ def test_smoke_label_flip_config_uses_short_training_schedule():
     assert config["experiment"]["noise_type"] == "label_flip"
     assert config["experiment"]["noise_rate"] == 0.2
     assert config["training"]["max_steps"] == 10
+
+
+def test_build_history_rows_normalizes_trl_log_entries():
+    rows = train_dpo._build_history_rows(
+        experiment_id="exp-1",
+        config_name="label_flip_20",
+        log_history=[
+            {
+                "step": 10,
+                "epoch": 0.1,
+                "loss": 0.72,
+                "learning_rate": 0.000005,
+                "rewards/margins": 0.03,
+                "rewards/accuracies": 0.5,
+                "logps/chosen": -1.2,
+                "logps/rejected": -1.8,
+            },
+            {
+                "step": 10,
+                "epoch": 0.1,
+                "eval_loss": 0.69,
+                "eval_rewards/margins": 0.04,
+                "eval_rewards/accuracies": 0.55,
+                "eval_logps/chosen": -1.1,
+                "eval_logps/rejected": -1.9,
+            },
+        ],
+    )
+
+    assert rows[0]["experiment_id"] == "exp-1"
+    assert rows[0]["config_name"] == "label_flip_20"
+    assert rows[0]["phase"] == "train"
+    assert rows[0]["loss"] == 0.72
+    assert rows[0]["reward_margin"] == 0.03
+    assert rows[1]["phase"] == "eval"
+    assert rows[1]["loss"] == 0.69
+    assert rows[1]["win_rate"] == 0.55

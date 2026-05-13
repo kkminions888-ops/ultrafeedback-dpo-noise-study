@@ -42,6 +42,20 @@ METRICS_FIELDS = (
     "status",
 )
 
+HISTORY_FIELDS = (
+    "experiment_id",
+    "config_name",
+    "step",
+    "epoch",
+    "phase",
+    "loss",
+    "reward_margin",
+    "win_rate",
+    "chosen_logprob",
+    "rejected_logprob",
+    "learning_rate",
+)
+
 
 def build_experiment_id(spec: Mapping[str, Any]) -> str:
     payload = {
@@ -68,6 +82,7 @@ def write_run_artifacts(
     run_dir: Path,
     *,
     config: Mapping[str, Any],
+    history_rows: Sequence[Mapping[str, Any]],
     metrics: Mapping[str, Any],
     samples: Sequence[Mapping[str, Any]],
     train_log: str,
@@ -82,6 +97,11 @@ def write_run_artifacts(
         json.dumps(dict(metrics), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    with (run_dir / "history.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HISTORY_FIELDS, delimiter=",")
+        writer.writeheader()
+        for row in history_rows:
+            writer.writerow({name: row.get(name, "NA") for name in HISTORY_FIELDS})
     with (run_dir / "samples.jsonl").open("w", encoding="utf-8") as handle:
         for sample in samples:
             handle.write(json.dumps(dict(sample), ensure_ascii=False) + "\n")
@@ -105,6 +125,11 @@ def append_metrics_row(path: Path, row: Mapping[str, Any]) -> None:
     _append_row(path, METRICS_FIELDS, row, delimiter=",")
 
 
+def append_history_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    for row in rows:
+        _append_row(path, HISTORY_FIELDS, row, delimiter=",")
+
+
 def export_named_experiment_result(results_root: Path, row: Mapping[str, Any]) -> Path:
     results_root.mkdir(parents=True, exist_ok=True)
     config_name = str(row.get("config_name", "unknown"))
@@ -124,4 +149,19 @@ def export_named_metrics_result(results_root: Path, row: Mapping[str, Any]) -> P
         writer = csv.DictWriter(handle, fieldnames=METRICS_FIELDS, delimiter=",")
         writer.writeheader()
         writer.writerow({name: row.get(name, "NA") for name in METRICS_FIELDS})
+    return path
+
+
+def export_named_history_result(
+    results_root: Path,
+    config_name: str,
+    rows: Sequence[Mapping[str, Any]],
+) -> Path:
+    results_root.mkdir(parents=True, exist_ok=True)
+    path = results_root / f"history_{config_name}.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HISTORY_FIELDS, delimiter=",")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({name: row.get(name, "NA") for name in HISTORY_FIELDS})
     return path
