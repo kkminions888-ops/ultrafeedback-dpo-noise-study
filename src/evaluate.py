@@ -27,6 +27,38 @@ def build_metrics_record(
     runtime_minutes: float,
     status: str,
 ) -> dict[str, Any]:
+    reward_margin = _metric_or_na(
+        eval_metrics,
+        "reward_margin",
+        "rewards/margins",
+        "eval_reward_margin",
+        "eval_rewards/margins",
+    )
+    if reward_margin == "NA":
+        reward_margin = _metric_or_na(
+            train_metrics,
+            "reward_margin",
+            "rewards/margins",
+            "eval_reward_margin",
+            "eval_rewards/margins",
+        )
+
+    win_rate = _metric_or_na(
+        eval_metrics,
+        "win_rate",
+        "rewards/accuracies",
+        "eval_rewards/accuracies",
+        "accuracy",
+    )
+    if win_rate == "NA":
+        win_rate = _metric_or_na(
+            train_metrics,
+            "win_rate",
+            "rewards/accuracies",
+            "eval_rewards/accuracies",
+            "accuracy",
+        )
+
     merged = {
         "experiment_id": experiment_id,
         "config_name": config_name,
@@ -35,13 +67,7 @@ def build_metrics_record(
         "seed": seed,
         "train_loss": _metric_or_na(train_metrics, "train_loss", "loss"),
         "eval_loss": _metric_or_na(eval_metrics, "eval_loss", "loss"),
-        "reward_margin": _metric_or_na(
-            eval_metrics,
-            "reward_margin",
-            "rewards/margins",
-            "eval_reward_margin",
-            "eval_rewards/margins",
-        ),
+        "reward_margin": reward_margin,
         "chosen_logprob": _metric_or_na(
             train_metrics,
             "chosen_logprob",
@@ -58,13 +84,7 @@ def build_metrics_record(
             "rewards/rejected",
             "eval_rewards/rejected",
         ),
-        "win_rate": _metric_or_na(
-            eval_metrics,
-            "win_rate",
-            "rewards/accuracies",
-            "eval_rewards/accuracies",
-            "accuracy",
-        ),
+        "win_rate": win_rate,
         "runtime_minutes": runtime_minutes,
         "status": status,
     }

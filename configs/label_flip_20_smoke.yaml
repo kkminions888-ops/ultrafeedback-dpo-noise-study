@@ -1,0 +1,4 @@
+inherits: label_flip_20.yaml
+
+training:
+  max_steps: 10

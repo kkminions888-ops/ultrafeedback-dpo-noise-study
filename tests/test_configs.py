@@ -25,3 +25,8 @@ def test_version_b_plan_expands_to_ten_experiments():
 def test_single_experiment_version_a_plan_expands_to_one_experiment():
     plan = list_experiment_configs(Path("configs/version_a_clean.yaml"))
     assert [item.name for item in plan] == ["clean.yaml"]
+
+
+def test_smoke_label_flip_plan_expands_to_one_experiment():
+    plan = list_experiment_configs(Path("configs/version_a_label_flip_20_smoke.yaml"))
+    assert [item.name for item in plan] == ["label_flip_20_smoke.yaml"]

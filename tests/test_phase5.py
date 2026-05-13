@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.evaluate import build_metrics_record
+from src.configs import load_experiment_config
 from src.pipeline import run_batch
 from src import train_dpo
 from src.train_dpo import build_dpo_config_kwargs, resolve_train_dataset_path
@@ -116,6 +117,27 @@ def test_build_metrics_record_fills_missing_metrics_with_na():
     assert record["status"] == "success"
 
 
+def test_build_metrics_record_falls_back_to_train_metrics_for_reward_margin_and_win_rate():
+    record = build_metrics_record(
+        experiment_id="exp-1b",
+        config_name="label_flip_20",
+        noise_type="label_flip",
+        noise_rate=0.2,
+        seed=42,
+        train_metrics={
+            "train_loss": 0.5,
+            "rewards/margins": 0.12,
+            "rewards/accuracies": 0.55,
+        },
+        eval_metrics={},
+        runtime_minutes=1.5,
+        status="success",
+    )
+
+    assert record["reward_margin"] == 0.12
+    assert record["win_rate"] == 0.55
+
+
 def test_build_metrics_record_accepts_trl_metric_names():
     record = build_metrics_record(
         experiment_id="exp-2",
@@ -155,3 +177,11 @@ def test_run_batch_can_use_injected_executor(tmp_path: Path):
 
     assert seen == ["clean", "label_flip_20", "ambiguous_20", "weak_quality_20"]
     assert [item["status"] for item in results] == ["success", "success", "success", "success"]
+
+
+def test_smoke_label_flip_config_uses_short_training_schedule():
+    config = load_experiment_config(Path("configs/label_flip_20_smoke.yaml"))
+
+    assert config["experiment"]["noise_type"] == "label_flip"
+    assert config["experiment"]["noise_rate"] == 0.2
+    assert config["training"]["max_steps"] == 10
