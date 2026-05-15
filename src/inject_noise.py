@@ -116,6 +116,14 @@ def _select_by_metric(
     return sorted(index for _, index in scored[:count])
 
 
+def _select_replacement_positions(total: int, count: int, seed: int, target_indices: set[int]) -> list[int]:
+    candidate_indices = [index for index in range(total) if index not in target_indices]
+    if len(candidate_indices) < count:
+        candidate_indices = list(range(total))
+    random.Random(seed).shuffle(candidate_indices)
+    return sorted(candidate_indices[:count])
+
+
 def inject_label_flip_noise(
     records: Sequence[Mapping[str, Any]], *, noise_rate: float, seed: int
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -158,16 +166,20 @@ def inject_label_flip_noise(
 
 
 def inject_ambiguous_noise(
-    records: Sequence[Mapping[str, Any]], *, noise_rate: float
+    records: Sequence[Mapping[str, Any]], *, noise_rate: float, seed: int = 42
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     count = _selected_count(len(records), noise_rate)
-    selected_indices = set(_select_by_metric(records, count, metric_key="score_gap", ascending=True))
+    target_indices = _select_by_metric(records, count, metric_key="score_gap", ascending=True)
+    selected_indices = set(_select_replacement_positions(len(records), count, seed, set(target_indices)))
+    replacements = dict(zip(selected_indices, target_indices))
     noisy: list[dict[str, Any]] = []
 
     for index, record in enumerate(records):
-        updated = _deepcopy_record(record)
         selected = index in selected_indices
-        gap = _score_gap(record)
+        replacement_index = replacements.get(index, index)
+        replacement_record = records[replacement_index] if selected else record
+        updated = _deepcopy_record(replacement_record)
+        gap = _score_gap(replacement_record)
         updated = _ensure_noise_metadata(
             updated,
             noise_type="ambiguous",
@@ -177,7 +189,9 @@ def inject_ambiguous_noise(
             rank=sum(1 for i in selected_indices if i < index) if selected else None,
             extra={
                 "score_gap": gap,
-                "operation": "retain_pair_with_small_gap" if selected else "retain_pair",
+                "operation": "replace_with_small_gap_pair" if selected else "retain_pair",
+                "original_source_index": record.get("source_index", index) if selected else None,
+                "replacement_source_index": replacement_record.get("source_index", replacement_index) if selected else None,
             },
         )
         noisy.append(updated)
@@ -187,12 +201,13 @@ def inject_ambiguous_noise(
         "noise_rate": noise_rate,
         "selected_count": len(selected_indices),
         "selection_strategy": "smallest_score_gap",
+        "operation": "replace_training_positions",
     }
     return noisy, summary
 
 
 def inject_weak_quality_noise(
-    records: Sequence[Mapping[str, Any]], *, noise_rate: float
+    records: Sequence[Mapping[str, Any]], *, noise_rate: float, seed: int = 42
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     count = _selected_count(len(records), noise_rate)
 
@@ -204,14 +219,18 @@ def inject_weak_quality_noise(
         and _get_score(record, "score_chosen") > _get_score(record, "score_rejected")
     ]
     eligible_indices.sort(key=lambda index: (_get_score(records[index], "score_chosen"), _score_gap(records[index]), index))
-    selected_indices = set(eligible_indices[:count]) if eligible_indices else set()
+    target_indices = eligible_indices[:count] if eligible_indices else []
+    selected_indices = set(_select_replacement_positions(len(records), len(target_indices), seed, set(target_indices)))
+    replacements = dict(zip(selected_indices, target_indices))
     noisy: list[dict[str, Any]] = []
 
     for index, record in enumerate(records):
-        updated = _deepcopy_record(record)
         selected = index in selected_indices
-        chosen_score = _get_score(record, "score_chosen")
-        rejected_score = _get_score(record, "score_rejected")
+        replacement_index = replacements.get(index, index)
+        replacement_record = records[replacement_index] if selected else record
+        updated = _deepcopy_record(replacement_record)
+        chosen_score = _get_score(replacement_record, "score_chosen")
+        rejected_score = _get_score(replacement_record, "score_rejected")
         updated = _ensure_noise_metadata(
             updated,
             noise_type="weak_quality",
@@ -222,7 +241,9 @@ def inject_weak_quality_noise(
             extra={
                 "chosen_score": chosen_score,
                 "rejected_score": rejected_score,
-                "operation": "retain_direction_with_low_quality_chosen" if selected else "retain_pair",
+                "operation": "replace_with_low_quality_pair" if selected else "retain_pair",
+                "original_source_index": record.get("source_index", index) if selected else None,
+                "replacement_source_index": replacement_record.get("source_index", replacement_index) if selected else None,
             },
         )
         noisy.append(updated)
@@ -232,6 +253,7 @@ def inject_weak_quality_noise(
         "noise_rate": noise_rate,
         "selected_count": len(selected_indices),
         "selection_strategy": "lowest_chosen_score",
+        "operation": "replace_training_positions",
     }
     return noisy, summary
 
@@ -245,9 +267,9 @@ def inject_noise(
     if noise_type == "label_flip":
         return inject_label_flip_noise(records, noise_rate=noise_rate, seed=seed)
     if noise_type == "ambiguous":
-        return inject_ambiguous_noise(records, noise_rate=noise_rate)
+        return inject_ambiguous_noise(records, noise_rate=noise_rate, seed=seed)
     if noise_type == "weak_quality":
-        return inject_weak_quality_noise(records, noise_rate=noise_rate)
+        return inject_weak_quality_noise(records, noise_rate=noise_rate, seed=seed)
     raise ValueError(f"unsupported noise_type: {noise_type}")
 
 

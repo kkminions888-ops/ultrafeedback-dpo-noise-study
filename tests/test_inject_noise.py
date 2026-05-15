@@ -56,7 +56,7 @@ def test_label_flip_noise_swaps_pairs_deterministically():
         assert noisy_a[index]["metadata"]["noise"]["selected"] is False
 
 
-def test_ambiguous_noise_picks_smallest_gap_without_swapping():
+def test_ambiguous_noise_replaces_training_positions_with_smallest_gap_pairs():
     records = [
         _make_record(0, 9.0, 8.9),
         _make_record(1, 9.0, 7.5),
@@ -65,19 +65,30 @@ def test_ambiguous_noise_picks_smallest_gap_without_swapping():
         _make_record(4, 7.5, 1.0),
     ]
 
-    noisy, summary = inject_ambiguous_noise(records, noise_rate=0.4)
+    noisy, summary = inject_ambiguous_noise(records, noise_rate=0.4, seed=7)
 
     assert summary["selected_count"] == 2
     selected = [item for item in noisy if item["metadata"]["noise"]["selected"]]
-    assert [item["source_index"] for item in selected] == [0, 1]
+    changed = [
+        item
+        for before, item in zip(records, noisy)
+        if before["prompt"] != item["prompt"]
+        or before["chosen"] != item["chosen"]
+        or before["rejected"] != item["rejected"]
+    ]
+    assert len(changed) == 2
+    assert len(selected) == 2
+    assert sorted(item["source_index"] for item in selected) == [0, 1]
     for item in selected:
         assert item["chosen"] == records[item["source_index"]]["chosen"]
         assert item["rejected"] == records[item["source_index"]]["rejected"]
         assert item["metadata"]["noise"]["type"] == "ambiguous"
         assert item["metadata"]["noise"]["selection_strategy"] == "smallest_score_gap"
+        assert item["metadata"]["noise"]["operation"] == "replace_with_small_gap_pair"
+        assert "original_source_index" in item["metadata"]["noise"]
 
 
-def test_weak_quality_noise_keeps_direction_and_selects_low_chosen_score():
+def test_weak_quality_noise_replaces_training_positions_with_low_chosen_score_pairs():
     records = [
         _make_record(0, 9.0, 8.0),
         _make_record(1, 6.0, 5.5),
@@ -86,16 +97,27 @@ def test_weak_quality_noise_keeps_direction_and_selects_low_chosen_score():
         _make_record(4, 5.0, 4.8),
     ]
 
-    noisy, summary = inject_weak_quality_noise(records, noise_rate=0.4)
+    noisy, summary = inject_weak_quality_noise(records, noise_rate=0.4, seed=7)
 
     assert summary["selected_count"] == 2
     selected = [item for item in noisy if item["metadata"]["noise"]["selected"]]
-    assert [item["source_index"] for item in selected] == [2, 4]
+    changed = [
+        item
+        for before, item in zip(records, noisy)
+        if before["prompt"] != item["prompt"]
+        or before["chosen"] != item["chosen"]
+        or before["rejected"] != item["rejected"]
+    ]
+    assert len(changed) == 2
+    assert len(selected) == 2
+    assert sorted(item["source_index"] for item in selected) == [2, 4]
     for item in selected:
         assert item["chosen"] == records[item["source_index"]]["chosen"]
         assert item["rejected"] == records[item["source_index"]]["rejected"]
         assert item["metadata"]["noise"]["type"] == "weak_quality"
         assert item["metadata"]["noise"]["selection_strategy"] == "lowest_chosen_score"
+        assert item["metadata"]["noise"]["operation"] == "replace_with_low_quality_pair"
+        assert "original_source_index" in item["metadata"]["noise"]
 
 
 def test_prepare_noise_artifacts_writes_outputs(tmp_path: Path):
